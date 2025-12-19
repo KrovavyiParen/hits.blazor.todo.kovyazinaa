@@ -1,0 +1,193 @@
+﻿@using Components.Models;
+@using Components.Services;
+@inject IFinanceService IFinanceService
+
+@if (IsVisible)
+{
+    <div class="modal" style="display: block; background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">@Title</h5>
+                    <button type="button" class="close" @onclick="Cancel">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                
+                <div class="modal-body">
+                    <EditForm Model="Transaction" OnValidSubmit="HandleValidSubmit">
+                        <DataAnnotationsValidator />
+                        
+                        <div class="form-group">
+                            <label>Тип транзакции:</label>
+                            <div>
+                                <div class="form-check form-check-inline">
+                                    <input class="form-check-input" type="radio"
+                                           id="income"
+                                           name="transactionType"
+                                           checked="@(Transaction.Type == TransactionType.Income)"
+                                           @onchange="@(() => { Transaction.Type = TransactionType.Income; OnTypeChanged(); })" />
+                                    <label class="form-check-label text-success" for="income">
+                                        <i class="fas fa-arrow-up"></i> Доход
+                                    </label>
+                                </div>
+                                <div class="form-check form-check-inline">
+                                    <input class="form-check-input" type="radio"
+                                           id="expense"
+                                           name="transactionType"
+                                           checked="@(Transaction.Type == TransactionType.Expense)"
+                                           @onchange="@(() => { Transaction.Type = TransactionType.Expense; OnTypeChanged(); })" />
+                                    <label class="form-check-label text-danger" for="expense">
+                                        <i class="fas fa-arrow-down"></i> Расход
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="amount">Сумма *</label>
+                            <div class="input-group">
+                                <div class="input-group-prepend">
+                                    <span class="input-group-text">₽</span>
+                                </div>
+                                <InputNumber id="amount" class="form-control" 
+                                            @bind-Value="Transaction.Amount" />
+                            </div>
+                            <ValidationMessage For="@(() => Transaction.Amount)" />
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="category">Категория *</label>
+                            <select id="category" class="form-control" 
+                                    @bind="Transaction.TransactionName">
+                                @foreach (TransactionName category in Enum.GetValues(typeof(TransactionName)))
+                                {
+                                    <option value="@((int)category)">
+                                        @GetDisplayName(category)
+                                    </option>
+                                }
+                            </select>
+                            <ValidationMessage For="@(() => Transaction.TransactionName)" />
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="date">Дата *</label>
+                            <InputDate id="date" class="form-control" 
+                                      @bind-Value="Transaction.Date" />
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="description">Описание</label>
+                            <InputText id="description" class="form-control" 
+                                      @bind-Value="Transaction.Description" 
+                                      placeholder="Например: Зарплата за январь" />
+                        </div>
+                        
+                        <div class="modal-footer mt-3">
+                            <button type="button" class="btn btn-secondary" @onclick="Cancel">
+                                Отмена
+                            </button>
+                            <button type="submit" class="btn btn-primary">
+                                Сохранить
+                            </button>
+                        </div>
+                    </EditForm>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public Transaction Transaction { get; set; } = new Transaction { 
+        Date = DateTime.Now, 
+        Type = TransactionType.Expense 
+    };
+    
+    [Parameter]
+    public EventCallback<Transaction> OnSave { get; set; }
+    
+    [Parameter]
+    public EventCallback OnCancel { get; set; }
+    
+    [Parameter]
+    public bool IsVisible { get; set; }
+    
+    private string Title => Transaction?.Id > 0 ? "Редактировать транзакцию" : "Добавить транзакцию";
+    private List<Category> allCategories = new();
+    private List<Category> filteredCategories = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadCategories();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (IsVisible)
+        {
+            await LoadCategories();
+        }
+    }
+
+    private async Task LoadCategories()
+    {
+        try
+        {
+            allCategories = await IFinanceService.GetCategoriesAsync();
+            FilterCategories();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Ошибка загрузки категорий: {ex.Message}");
+        }
+    }
+
+    private void FilterCategories()
+    {
+        filteredCategories = allCategories?
+            .Where(c => c.Type == Transaction.Type)
+            .ToList() ?? new List<Category>();
+        
+        if (Transaction.CategoryId > 0)
+        {
+            var currentCategory = allCategories?.FirstOrDefault(c => c.Id == Transaction.CategoryId);
+            if (currentCategory == null || currentCategory.Type != Transaction.Type)
+            {
+                Transaction.CategoryId = 0;
+            }
+        }
+    }
+
+    private void OnTypeChanged()
+    {
+        FilterCategories();
+        StateHasChanged();
+    }
+
+    private async Task HandleValidSubmit()
+    {
+        if (Transaction.Amount <= 0)
+        {
+            return;
+        }
+
+        if (Transaction.CategoryId == 0 && filteredCategories.Any())
+        {
+            Transaction.CategoryId = filteredCategories.First().Id;
+        }
+
+        await OnSave.InvokeAsync(Transaction);
+    }
+
+    private string GetDisplayName(TransactionName category)
+    {
+        return category.ToString().Replace("_", " ");
+    }
+
+    private async Task Cancel()
+    {
+        await OnCancel.InvokeAsync();
+    }
+}

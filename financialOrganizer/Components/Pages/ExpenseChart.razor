@@ -1,0 +1,126 @@
+﻿@using System.Globalization
+
+<div class="chart-container">
+    <svg width="300" height="300" viewBox="0 0 300 300">
+        @if (CategoryExpenses != null && CategoryExpenses.Any())
+        {
+            var total = CategoryExpenses.Values.Sum();
+            var colors = GetColors(CategoryExpenses.Count);
+            var startAngle = 0.0;
+            var index = 0;
+
+            @foreach (var item in CategoryExpenses)
+            {
+                var percentage = item.Value / total;
+                var doublePercentage = (double)(item.Value / total);
+                var angle = doublePercentage * 360;
+                var endAngle = startAngle + angle;
+
+                if (percentage > 0)
+                {
+                    <path d="@GetArcPath(startAngle, angle)"
+                          fill="@colors[index]"
+                          stroke="white"
+                          stroke-width="2"
+                          data-category="@item.Key"
+                          data-value="@item.Value"
+                          @onmouseover="@(() => ShowTooltip(item.Key, item.Value, percentage))"
+                          @onmouseout="HideTooltip" />
+                }
+
+                startAngle = endAngle;
+                index++;
+            }
+        }
+        <circle cx="150" cy="150" r="50" fill="white" />
+        <text x="150" y="150" text-anchor="middle" dy=".3em" font-size="14" fill="#666">
+            @if (CategoryExpenses?.Any() == true)
+            {
+                @CategoryExpenses.Values.Sum().ToString("C")
+            }
+        </text>
+    </svg>
+
+    @if (showTooltip)
+    {
+        <div class="chart-tooltip" style="left: @tooltipXpx; top: @tooltipYpx">
+            <strong>@tooltipCategory</strong><br />
+            @tooltipValue.ToString("C")<br />
+            @Math.Round(tooltipPercentage * 100, 1)%
+        </div>
+    }
+</div>
+
+<div class="chart-legend">
+    @if (CategoryExpenses != null)
+    {
+        var colors = GetColors(CategoryExpenses.Count);
+        var index = 0;
+
+        @foreach (var item in CategoryExpenses)
+        {
+            <div class="legend-item">
+                <span class="legend-color" style="background-color: @colors[index]"></span>
+                <span class="legend-label">@item.Key</span>
+                <span class="legend-value">@item.Value.ToString("C")</span>
+            </div>
+            index++;
+        }
+    }
+</div>
+
+@code {
+    [Parameter]
+    public Dictionary<string, decimal> CategoryExpenses { get; set; }
+
+    private bool showTooltip = false;
+    private string tooltipCategory = "";
+    private decimal tooltipValue = 0;
+    private decimal tooltipPercentage = 0;
+    private string tooltipXpx = "0px";
+    private string tooltipYpx = "0px";
+
+    private List<string> GetColors(int count)
+    {
+        return new List<string>
+        {
+            "#FF6384", "#36A2EB", "#FFCE56", "#4BC0C0",
+            "#9966FF", "#FF9F40", "#8AC926", "#1982C4"
+        }.Take(count).ToList();
+    }
+
+    private string GetArcPath(double startAngle, double angle)
+    {
+        var centerX = 150;
+        var centerY = 150;
+        var radius = 100;
+
+        var startRad = (startAngle - 90) * Math.PI / 180;
+        var endRad = (startAngle + angle - 90) * Math.PI / 180;
+
+        var startX = centerX + radius * Math.Cos(startRad);
+        var startY = centerY + radius * Math.Sin(startRad);
+
+        var endX = centerX + radius * Math.Cos(endRad);
+        var endY = centerY + radius * Math.Sin(endRad);
+
+        var largeArcFlag = angle > 180 ? 1 : 0;
+
+        return $"M {centerX} {centerY} L {startX} {startY} A {radius} {radius} 0 {largeArcFlag} 1 {endX} {endY} Z";
+    }
+
+    private void ShowTooltip(string category, decimal value, decimal percentage)
+    {
+        tooltipCategory = category;
+        tooltipValue = value;
+        tooltipPercentage = percentage;
+        showTooltip = true;
+        StateHasChanged();
+    }
+
+    private void HideTooltip()
+    {
+        showTooltip = false;
+        StateHasChanged();
+    }
+}
